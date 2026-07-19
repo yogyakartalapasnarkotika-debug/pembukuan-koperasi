@@ -830,15 +830,15 @@ export default function Dashboard({
                   />
                 </div>
                 <div>
-                  <label className="text-[9px] font-bold text-slate-500 block mb-0.5">PIN Keamanan (PIN)</label>
+                  <label className="text-[9px] font-bold text-slate-500 block mb-0.5">Password / PIN Baru</label>
                   <input 
                     type="password" 
                     value={newPin} 
                     onChange={(e) => setNewPin(e.target.value)}
                     disabled={currentUser.role !== 'admin'}
                     className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-semibold focus:outline-hidden focus:ring-1 focus:ring-blue-500 disabled:opacity-60"
-                    placeholder="4 Digit PIN"
-                    maxLength={6}
+                    placeholder="Masukkan password atau PIN"
+                    maxLength={32}
                   />
                 </div>
               </div>
@@ -897,7 +897,7 @@ export default function Dashboard({
                       }`}>
                         {roleLabel}
                       </span>
-                      <span className="text-[8px] font-mono text-slate-400 font-semibold">PIN: ****</span>
+                      <span className="text-[8px] font-mono text-slate-500 font-semibold">Pass: <strong className="text-slate-800">{acc.pin}</strong></span>
                     </div>
                   </div>
                 );

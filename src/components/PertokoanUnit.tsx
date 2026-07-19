@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Member, PertokoanProduct, PertokoanSale, PertokoanSaleItem } from '../types';
+import { Member, PertokoanProduct, PertokoanSale, PertokoanSaleItem, WartelRecord } from '../types';
 import { 
   ShoppingBag, 
   ShoppingCart, 
@@ -21,13 +21,19 @@ import {
   User,
   Sliders,
   DollarSign,
-  X
+  X,
+  PhoneCall,
+  Smartphone,
+  Gamepad2,
+  Database,
+  Layers
 } from 'lucide-react';
 
 interface PertokoanUnitProps {
   members: Member[];
   products: PertokoanProduct[];
   sales: PertokoanSale[];
+  wartelRecords?: WartelRecord[];
   onAddSale: (newSale: PertokoanSale) => void;
   onUpdateProductStock: (productId: string, quantityToDeduct: number) => void;
   activeSubTab?: string;
@@ -51,6 +57,7 @@ export default function PertokoanUnit({
   members,
   products,
   sales,
+  wartelRecords = [],
   onAddSale,
   onUpdateProductStock,
   activeSubTab = 'order',
@@ -61,11 +68,11 @@ export default function PertokoanUnit({
   onDeleteProduct
 }: PertokoanUnitProps) {
   // --- Local sub-navigation tab ---
-  const [localTab, setLocalTab] = useState<'order' | 'master_barang' | 'generate_voucher' | 'laporan' | 'bagi_hasil'>(activeSubTab as any || 'order');
+  const [localTab, setLocalTab] = useState<'order' | 'master_barang' | 'generate_voucher' | 'laporan' | 'bagi_hasil' | 'penjualan_wartel'>(activeSubTab as any || 'order');
 
   // Sync with parent sidebar navigation changes
   React.useEffect(() => {
-    if (['order', 'master_barang', 'generate_voucher', 'laporan'].includes(activeSubTab)) {
+    if (['order', 'master_barang', 'generate_voucher', 'laporan', 'bagi_hasil', 'penjualan_wartel'].includes(activeSubTab)) {
       setLocalTab(activeSubTab as any);
     }
   }, [activeSubTab]);
@@ -455,6 +462,7 @@ export default function PertokoanUnit({
           { id: 'order', label: 'Kasir & Order (POS)', icon: ShoppingCart },
           { id: 'master_barang', label: 'Master Barang Toko', icon: Package },
           { id: 'generate_voucher', label: 'Voucher Belanja', icon: Ticket },
+          { id: 'penjualan_wartel', label: 'Penjualan Produk Wartel (Sync)', icon: Coins },
           { id: 'bagi_hasil', label: 'Bagi Hasil Pihak ke-3', icon: Sliders },
           { id: 'laporan', label: 'Laporan Penjualan', icon: FileText }
         ].map(tab => {
@@ -1341,6 +1349,194 @@ export default function PertokoanUnit({
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* 4. Penjualan Produk Wartel Sub-tab */}
+      {localTab === 'penjualan_wartel' && (
+        <div className="space-y-6 animate-fade-in" id="toko-tab-penjualan-wartel">
+          {/* Synchronized Alert Info */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-5 shadow-3xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 text-blue-800">
+                <Layers className="text-blue-600 animate-pulse animate-duration-1000" size={18} />
+                <h4 className="font-extrabold text-xs uppercase tracking-wider">Sinkronisasi Otomatis Unit Wartel & Pertokoan</h4>
+              </div>
+              <p className="text-xs text-slate-600 leading-relaxed font-semibold">
+                Setiap transaksi penjualan pulsa, paket data, telepon bilik, voucher, dan lainnya yang diinput oleh operator di <span className="text-blue-700 font-extrabold">Unit Wartel</span> akan secara otomatis tercatat dan masuk ke dalam pembukuan saldo/omzet <span className="text-blue-700 font-extrabold">Unit Pertokoan</span> di bawah ini secara real-time.
+              </p>
+            </div>
+            <div className="bg-white px-3.5 py-1.5 rounded-lg border border-blue-150 shadow-3xs flex items-center gap-2">
+              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>
+              <span className="text-[10px] font-black text-slate-800 tracking-wider uppercase">Tersinkronisasi Live</span>
+            </div>
+          </div>
+
+          {/* KPI Bento Grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+            {[
+              { 
+                label: 'Total Omzet', 
+                val: wartelRecords.reduce((s, r) => s + r.sellingPrice, 0), 
+                color: 'from-blue-600 to-indigo-600 text-white',
+                count: wartelRecords.length,
+                icon: Coins 
+              },
+              { 
+                label: 'Pulsa', 
+                val: wartelRecords.filter(r => r.serviceType === 'pulsa').reduce((s, r) => s + r.sellingPrice, 0), 
+                color: 'bg-white border border-slate-200 text-slate-800',
+                count: wartelRecords.filter(r => r.serviceType === 'pulsa').length,
+                icon: Smartphone 
+              },
+              { 
+                label: 'Paket Data', 
+                val: wartelRecords.filter(r => r.serviceType === 'paket_data').reduce((s, r) => s + r.sellingPrice, 0), 
+                color: 'bg-white border border-slate-200 text-slate-800',
+                count: wartelRecords.filter(r => r.serviceType === 'paket_data').length,
+                icon: Layers 
+              },
+              { 
+                label: 'Telepon Bilik', 
+                val: wartelRecords.filter(r => r.serviceType === 'telepon').reduce((s, r) => s + r.sellingPrice, 0), 
+                color: 'bg-white border border-slate-200 text-slate-800',
+                count: wartelRecords.filter(r => r.serviceType === 'telepon').length,
+                icon: PhoneCall 
+              },
+              { 
+                label: 'Voucher', 
+                val: wartelRecords.filter(r => r.serviceType === 'voucher_game').reduce((s, r) => s + r.sellingPrice, 0), 
+                color: 'bg-white border border-slate-200 text-slate-800',
+                count: wartelRecords.filter(r => r.serviceType === 'voucher_game').length,
+                icon: Gamepad2 
+              },
+              { 
+                label: 'Lain-lain', 
+                val: wartelRecords.filter(r => r.serviceType === 'lainnya').reduce((s, r) => s + r.sellingPrice, 0), 
+                color: 'bg-white border border-slate-200 text-slate-800',
+                count: wartelRecords.filter(r => r.serviceType === 'lainnya').length,
+                icon: Database 
+              },
+            ].map((kpi, idx) => {
+              const Icon = kpi.icon;
+              return (
+                <div key={idx} className={`rounded-2xl p-4.5 shadow-3xs space-y-2 flex flex-col justify-between ${kpi.color}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-90 block">{kpi.label}</span>
+                    <Icon size={16} className="opacity-80" />
+                  </div>
+                  <div>
+                    <span className="font-mono text-sm font-black block leading-tight">{formatIDR(kpi.val)}</span>
+                    <span className="text-[9px] font-semibold block mt-0.5 opacity-75">{kpi.count} Transaksi</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Table List */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Rincian Transaksi Produk Wartel Terhubung</h3>
+                <p className="text-xs text-slate-400 font-medium font-bold">Log riwayat penjualan produk wartel yang otomatis disinkronkan ke dalam sistem kas pertokoan</p>
+              </div>
+
+              {/* Simple Search Input */}
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
+                  <Search size={14} />
+                </span>
+                <input
+                  type="text"
+                  placeholder="Cari nama atau deskripsi..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 w-60 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <th className="p-3">Waktu</th>
+                    <th className="p-3">Jenis Produk</th>
+                    <th className="p-3">Pelanggan</th>
+                    <th className="p-3">Harga Modal (HPP)</th>
+                    <th className="p-3 text-right">Harga Jual</th>
+                    <th className="p-3 text-right text-emerald-600">Keuntungan</th>
+                    <th className="p-3">Pembayaran</th>
+                    <th className="p-3">Keterangan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                  {wartelRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400 font-bold">
+                        Belum ada penjualan produk wartel yang tersinkron.
+                      </td>
+                    </tr>
+                  ) : (
+                    wartelRecords
+                      .filter(r => 
+                        r.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                        r.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                        r.serviceType.toLowerCase().includes(searchQuery.toLowerCase())
+                      )
+                      .map((r) => {
+                        const typeMeta: Record<string, { label: string, color: string }> = {
+                          pulsa: { label: 'Pulsa', color: 'bg-emerald-50 text-emerald-700 border-emerald-100' },
+                          paket_data: { label: 'Paket Data', color: 'bg-blue-50 text-blue-700 border-blue-100' },
+                          telepon: { label: 'Bilik Telepon', color: 'bg-indigo-50 text-indigo-700 border-indigo-100' },
+                          voucher_game: { label: 'Voucher', color: 'bg-amber-50 text-amber-700 border-amber-100' },
+                          lainnya: { label: 'Lainnya', color: 'bg-slate-100 text-slate-700 border-slate-200' },
+                        };
+                        const meta = typeMeta[r.serviceType] || typeMeta.lainnya;
+                        
+                        return (
+                          <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="p-3 font-mono text-[10px] text-slate-400 whitespace-nowrap">
+                              {r.date}
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${meta.color}`}>
+                                {meta.label}
+                              </span>
+                            </td>
+                            <td className="p-3 font-bold text-slate-800 whitespace-nowrap">
+                              {r.customerName}
+                            </td>
+                            <td className="p-3 font-mono text-slate-500 whitespace-nowrap">
+                              {formatIDR(r.costPrice)}
+                            </td>
+                            <td className="p-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                              {formatIDR(r.sellingPrice)}
+                            </td>
+                            <td className="p-3 text-right font-mono font-bold text-emerald-600 whitespace-nowrap">
+                              +{formatIDR(r.profit)}
+                            </td>
+                            <td className="p-3">
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide border ${
+                                r.paymentMethod === 'deposit' 
+                                  ? 'bg-purple-50 text-purple-700 border-purple-100' 
+                                  : 'bg-slate-100 text-slate-700 border-slate-200'
+                              }`}>
+                                {r.paymentMethod}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-500 max-w-xs truncate" title={r.description}>
+                              {r.description}
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 

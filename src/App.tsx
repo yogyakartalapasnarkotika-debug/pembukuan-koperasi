@@ -28,7 +28,8 @@ import {
   Building,
   Menu,
   X,
-  RefreshCw
+  RefreshCw,
+  Trash2
 } from 'lucide-react';
 
 export default function App() {
@@ -38,9 +39,27 @@ export default function App() {
 
   const [accounts, setAccounts] = useState<UserAccount[]>(() => {
     const saved = localStorage.getItem('kop_accounts');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const updated = parsed.map((acc: any) => {
+            if (acc && acc.username && acc.username.toLowerCase() === 'admin') {
+              return { ...acc, pin: 'admin' };
+            }
+            return acc;
+          });
+          if (!updated.some((acc: any) => acc && acc.username && acc.username.toLowerCase() === 'admin')) {
+            updated.push({ username: 'admin', name: 'Super Admin', role: 'admin', pin: 'admin' });
+          }
+          return updated;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
     return [
-      { username: 'admin', name: 'Super Admin', role: 'admin', pin: '9999' },
+      { username: 'admin', name: 'Super Admin', role: 'admin', pin: 'admin' },
       { username: 'ketua', name: 'Danang Andriyanto', role: 'verifikator_ketua', pin: '3333' },
       { username: 'bendahara', name: 'Hendra Wijaya', role: 'verifikator_bendahara', pin: '2222' },
       { username: 'op_sp', name: 'Siti Aminah', role: 'operator_sp', pin: '4444' },
@@ -52,9 +71,13 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => {
     const saved = localStorage.getItem('kop_current_user');
     if (saved) return JSON.parse(saved);
-    // Standard default logged-in user is Ketua Koperasi for easy initial audit
-    return { username: 'ketua', name: 'Danang Andriyanto', role: 'verifikator_ketua', pin: '3333' };
+    return null; // Default to null to force login screen
   });
+
+  const [loginUsername, setLoginUsername] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [showDemoAccounts, setShowDemoAccounts] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [activeSubTab, setActiveSubTab] = useState<string>('pengurus');
@@ -194,6 +217,28 @@ export default function App() {
       setWartelRecords(INITIAL_WARTEL_RECORDS);
       setSales(INITIAL_SHOP_SALES);
       setActiveTab('dashboard');
+    }
+  };
+
+  // --- Hapus Semua Transaksi untuk Mulai dari Nol ---
+  const handleClearAllTransactions = () => {
+    if (confirm('Apakah Anda yakin ingin MENGHAPUS SEMUA CATATAN TRANSAKSI KAS, PENJUALAN TOKO, DAN REKAMAN WARTEL? Tindakan ini akan mengosongkan seluruh kas dan riwayat untuk memulai transaksi awal secara manual.')) {
+      setTransactions([]);
+      setSales([]);
+      setWartelRecords([]);
+      setLoans(prev => prev.map(l => ({
+        ...l,
+        remainingBalance: l.totalRepayment,
+        repaymentHistory: []
+      })));
+      // Set members savings back to base or leave them clean
+      setMembers(prev => prev.map(m => ({
+        ...m,
+        savings: { pokok: m.savings.pokok, wajib: m.savings.wajib, sukarela: 0 }
+      })));
+      setActiveTab('laporan');
+      setActiveSubTab('kas_harian');
+      alert('Semua transaksi berhasil dikosongkan. Jurnal kas kini dalam keadaan bersih (nol rupiah) dan siap diisi secara manual oleh bendahara!');
     }
   };
 
@@ -595,7 +640,8 @@ export default function App() {
   const isTabAuthorized = (tab: string) => {
     if (!currentUser) return false;
     const role = currentUser.role;
-    if (role === 'admin' || role === 'verifikator_bendahara') return true;
+    if (role === 'admin') return true;
+    if (role === 'verifikator_bendahara') return ['laporan', 'bendahara_treasury'].includes(tab);
     if (role === 'verifikator_ketua') return ['dashboard', 'simpan_pinjam', 'laporan'].includes(tab);
     if (role === 'operator_sp') return ['dashboard', 'database_anggota', 'simpan_pinjam'].includes(tab);
     if (role === 'operator_toko') return ['dashboard', 'database_anggota', 'pertokoan'].includes(tab);
@@ -604,6 +650,52 @@ export default function App() {
   };
 
   if (currentUser === null) {
+    const handleLoginSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      setLoginError(null);
+      const trimmedUsername = loginUsername.trim().toLowerCase();
+      const trimmedPassword = loginPassword.trim();
+      
+      let account = accounts.find(
+        (a) => a.username.toLowerCase() === trimmedUsername && a.pin.trim() === trimmedPassword
+      );
+
+      // Ultimate fallback: admin / admin always allowed
+      if (!account && trimmedUsername === 'admin' && trimmedPassword === 'admin') {
+        account = accounts.find(a => a.username.toLowerCase() === 'admin');
+        if (!account) {
+          account = { username: 'admin', name: 'Super Admin', role: 'admin', pin: 'admin' };
+          setAccounts(prev => [...prev, account!]);
+        } else {
+          account.pin = 'admin'; // Update PIN in-place if it was different
+        }
+      }
+
+      if (account) {
+        setCurrentUser(account);
+        setLoginUsername('');
+        setLoginPassword('');
+        // Reset navigation tab based on authority
+        if (account.role === 'operator_sp') {
+          setActiveTab('simpan_pinjam');
+          setActiveSubTab('pengurus');
+        } else if (account.role === 'operator_toko') {
+          setActiveTab('pertokoan');
+          setActiveSubTab('order');
+        } else if (account.role === 'operator_wartel') {
+          setActiveTab('wartel');
+          setActiveSubTab('kasir');
+        } else if (account.role === 'verifikator_bendahara') {
+          setActiveTab('laporan');
+          setActiveSubTab('kas_harian');
+        } else {
+          setActiveTab('dashboard');
+        }
+      } else {
+        setLoginError('Username atau Password/PIN salah. Silakan coba lagi.');
+      }
+    };
+
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col justify-center items-center p-4 font-sans text-slate-100">
         <div className="w-full max-w-md bg-slate-950 border border-slate-800 rounded-2xl p-6.5 shadow-2xl space-y-6">
@@ -617,57 +709,90 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Access Grid */}
-          <div className="space-y-3">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block text-center">Login Cepat Akses Kewenangan</span>
-            <div className="grid grid-cols-1 gap-2 text-left">
-              {accounts.map((acc) => {
-                const roleLabel = acc.role
-                  .replace('admin', 'Super Administrator (Akses Penuh)')
-                  .replace('operator_sp', 'Operator Simpan Pinjam')
-                  .replace('operator_toko', 'Operator Pertokoan')
-                  .replace('operator_wartel', 'Operator Wartel')
-                  .replace('verifikator_staff', 'Verifikator Staff')
-                  .replace('verifikator_bendahara', 'Verifikator Bendahara')
-                  .replace('verifikator_ketua', 'Ketua Koperasi');
+          <form onSubmit={handleLoginSubmit} className="space-y-4">
+            {loginError && (
+              <div className="p-3 bg-rose-500/20 border border-rose-500/30 text-rose-300 rounded-lg text-xs font-semibold text-center">
+                {loginError}
+              </div>
+            )}
 
-                return (
-                  <button
-                    key={acc.username}
-                    onClick={() => {
-                      setCurrentUser(acc);
-                      // Reset navigation tab based on authority
-                      if (acc.role === 'operator_sp') {
-                        setActiveTab('simpan_pinjam');
-                        setActiveSubTab('pengurus');
-                      } else if (acc.role === 'operator_toko') {
-                        setActiveTab('pertokoan');
-                        setActiveSubTab('order');
-                      } else if (acc.role === 'operator_wartel') {
-                        setActiveTab('wartel');
-                        setActiveSubTab('kasir');
-                      } else {
-                        setActiveTab('dashboard');
-                      }
-                    }}
-                    className="p-3 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 transition-all text-left flex justify-between items-center cursor-pointer group"
-                  >
-                    <div className="space-y-0.5">
-                      <span className="font-extrabold text-[11px] text-white group-hover:text-blue-400 block truncate">
-                        {acc.name}
-                      </span>
-                      <span className="text-[9px] text-slate-400 font-semibold block uppercase tracking-wide">
-                        {roleLabel}
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-blue-500 font-extrabold group-hover:text-blue-400">Masuk &rarr;</span>
-                  </button>
-                );
-              })}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-400 block">Username</label>
+              <input
+                type="text"
+                required
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                placeholder="Masukkan username (e.g. admin)"
+                className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 font-medium focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+              />
             </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-400 block">Password / PIN</label>
+              <input
+                type="password"
+                required
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="Masukkan password / PIN (e.g. admin)"
+                className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-500 font-mono focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm rounded-xl cursor-pointer transition-all shadow-md flex items-center justify-center gap-2"
+            >
+              Masuk ke Aplikasi &rarr;
+            </button>
+          </form>
+
+          {/* Help panel for demo */}
+          <div className="border-t border-slate-900 pt-4">
+            <button
+              type="button"
+              onClick={() => setShowDemoAccounts(!showDemoAccounts)}
+              className="w-full text-center text-slate-500 hover:text-slate-350 text-[11px] font-bold cursor-pointer flex items-center justify-center gap-1"
+            >
+              {showDemoAccounts ? 'Sembunyikan Petunjuk Akun' : 'Lihat Petunjuk Daftar Akun Default'}
+            </button>
+
+            {showDemoAccounts && (
+              <div className="mt-3 bg-slate-900/60 rounded-xl p-3 border border-slate-900 text-left space-y-2">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block border-b border-slate-800 pb-1">
+                  Kredensial Default (Username & Password)
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="bg-slate-950/40 p-2 rounded border border-slate-850">
+                    <span className="font-extrabold text-blue-400 block">Super Admin</span>
+                    <span className="text-slate-400">User: <strong className="text-white">admin</strong></span>
+                    <span className="block text-slate-400">Pass: <strong className="text-white">admin</strong></span>
+                  </div>
+                  <div className="bg-slate-950/40 p-2 rounded border border-slate-850">
+                    <span className="font-extrabold text-indigo-400 block">Bendahara</span>
+                    <span className="text-slate-400">User: <strong className="text-white">bendahara</strong></span>
+                    <span className="block text-slate-400">Pass: <strong className="text-white">2222</strong></span>
+                  </div>
+                  <div className="bg-slate-950/40 p-2 rounded border border-slate-850">
+                    <span className="font-extrabold text-emerald-400 block">Op. Simpan Pinjam</span>
+                    <span className="text-slate-400">User: <strong className="text-white">op_sp</strong></span>
+                    <span className="block text-slate-400">Pass: <strong className="text-white">4444</strong></span>
+                  </div>
+                  <div className="bg-slate-950/40 p-2 rounded border border-slate-850">
+                    <span className="font-extrabold text-amber-400 block">Op. Pertokoan</span>
+                    <span className="text-slate-400">User: <strong className="text-white">op_toko</strong></span>
+                    <span className="block text-slate-400">Pass: <strong className="text-white">5555</strong></span>
+                  </div>
+                </div>
+                <p className="text-[9px] text-slate-500 italic mt-1 text-center">
+                  * Admin dapat mendaftarkan user baru dari menu Pengaturan Koperasi.
+                </p>
+              </div>
+            )}
           </div>
 
-          <div className="text-center text-[10px] text-slate-500 border-t border-slate-900 pt-3">
+          <div className="text-center text-[10px] text-slate-500">
             Sistem Pembukuan Koperasi Multi-Usaha Terintegrasi
           </div>
         </div>
@@ -735,6 +860,17 @@ export default function App() {
               Keluar
             </button>
           </div>
+
+          {(currentUser.role === 'admin' || currentUser.role === 'verifikator_bendahara') && (
+            <button
+              onClick={handleClearAllTransactions}
+              className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg cursor-pointer transition-colors flex items-center justify-center"
+              title="Mulai Baru (Kosongkan Semua Transaksi)"
+              id="btn-clear-all-tx"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
 
           <button
             onClick={handleResetDatabase}
@@ -1036,6 +1172,7 @@ export default function App() {
               members={members}
               products={products}
               sales={sales}
+              wartelRecords={wartelRecords}
               onAddSale={handleAddSale}
               onUpdateProductStock={handleUpdateProductStock}
               activeSubTab={activeSubTab}
@@ -1057,6 +1194,7 @@ export default function App() {
               sales={sales}
               activeSubTab={activeSubTab}
               onDistributeSHU={handleDistributeSHU}
+              onAddTransaction={(tx) => setTransactions(prev => [...prev, tx])}
             />
           )}
 

@@ -31,6 +31,7 @@ interface FinancialReportsProps {
   sales: PertokoanSale[];
   activeSubTab?: string;
   onDistributeSHU?: (distributions: { memberId: string; amount: number }[]) => void;
+  onAddTransaction?: (tx: Transaction) => void;
 }
 
 export default function FinancialReports({
@@ -41,7 +42,8 @@ export default function FinancialReports({
   wartelRecords,
   sales,
   activeSubTab = 'kas_harian',
-  onDistributeSHU
+  onDistributeSHU,
+  onAddTransaction
 }: FinancialReportsProps) {
   const [reportTab, setReportTab] = useState<'kas' | 'rugilaba' | 'konsolidasi' | 'shu'>('kas');
 
@@ -55,8 +57,109 @@ export default function FinancialReports({
     }
   }, [activeSubTab]);
   
+  // --- GLOBAL PERIOD SELECTION STATES ---
+  const [periodType, setPeriodType] = useState<'all' | 'monthly' | 'custom'>('all');
+  const [selectedMonth, setSelectedMonth] = useState('07'); // Default July
+  const [selectedYear, setSelectedYear] = useState('2026');
+  const [startDate, setStartDate] = useState('2026-07-01');
+  const [endDate, setEndDate] = useState('2026-07-31');
+
   // --- Daily Cash Flow Date State ---
   const [selectedDate, setSelectedDate] = useState('2026-07-18');
+
+  // --- Transaction Input Form State ---
+  const [txType, setTxType] = useState<'kas_masuk' | 'kas_keluar'>('kas_masuk');
+  const [txUnit, setTxUnit] = useState<'umum' | 'wartel' | 'simpan_pinjam' | 'pertokoan'>('umum');
+  const [txAmount, setTxAmount] = useState<number>(0);
+  const [txDescription, setTxDescription] = useState('');
+  const [txPaymentMethod, setTxPaymentMethod] = useState<'cash' | 'deposit' | 'piutang'>('cash');
+  const [txReferenceId, setTxReferenceId] = useState('');
+  const [txErrorMsg, setTxErrorMsg] = useState('');
+  const [txSuccessMsg, setTxSuccessMsg] = useState('');
+
+  // Auto-determine transaction category based on unit, type, and description keywords
+  const determineCategory = (unit: string, type: 'kas_masuk' | 'kas_keluar', description: string) => {
+    const desc = description.toLowerCase();
+    if (type === 'kas_masuk') {
+      if (unit === 'simpan_pinjam') {
+        if (desc.includes('pokok')) return 'Simpanan Pokok';
+        if (desc.includes('wajib')) return 'Simpanan Wajib';
+        if (desc.includes('sukarela') || desc.includes('tabung') || desc.includes('simpan')) return 'Simpanan Sukarela';
+        if (desc.includes('angsur') || desc.includes('bayar pinjam') || desc.includes('cicilan') || desc.includes('kembal')) return 'Angsuran Pinjaman';
+        if (desc.includes('modal')) return 'Penyertaan Modal';
+        return 'Lain-lain';
+      }
+      if (unit === 'wartel') {
+        return 'Penjualan Wartel';
+      }
+      if (unit === 'pertokoan') {
+        return 'Penjualan Toko';
+      }
+      if (desc.includes('modal')) return 'Penyertaan Modal';
+      return 'Lain-lain';
+    } else { // kas_keluar
+      if (unit === 'simpan_pinjam') {
+        if (desc.includes('tarik') || desc.includes('ambil')) return 'Penarikan Sukarela';
+        if (desc.includes('cair') || desc.includes('pinjam') || desc.includes('hutang')) return 'Pencairan Pinjaman';
+        if (desc.includes('operasional') || desc.includes('biaya') || desc.includes('gaji') || desc.includes('listrik') || desc.includes('air') || desc.includes('atkr')) return 'Biaya Operasional';
+        if (desc.includes('inventaris') || desc.includes('beli alat') || desc.includes('aset') || desc.includes('barang')) return 'Pembelian Inventaris';
+        return 'Lain-lain';
+      }
+      if (unit === 'pertokoan') {
+        if (desc.includes('operasional') || desc.includes('biaya') || desc.includes('gaji') || desc.includes('listrik') || desc.includes('air') || desc.includes('atkr')) return 'Biaya Operasional';
+        if (desc.includes('inventaris') || desc.includes('beli alat') || desc.includes('aset') || desc.includes('barang')) return 'Pembelian Inventaris';
+        if (desc.includes('bagi hasil') || desc.includes('shu')) return 'Bagi Hasil';
+        return 'Lain-lain';
+      }
+      if (desc.includes('operasional') || desc.includes('biaya') || desc.includes('gaji') || desc.includes('listrik') || desc.includes('air') || desc.includes('atkr') || desc.includes('kantor')) return 'Biaya Operasional';
+      if (desc.includes('inventaris') || desc.includes('beli alat') || desc.includes('aset') || desc.includes('barang')) return 'Pembelian Inventaris';
+      if (desc.includes('bagi hasil') || desc.includes('shu')) return 'Bagi Hasil';
+      return 'Lain-lain';
+    }
+  };
+
+  // Handle manual transaction submission
+  const handleTxSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setTxErrorMsg('');
+    setTxSuccessMsg('');
+
+    if (txAmount <= 0) {
+      setTxErrorMsg('Nominal transaksi harus lebih besar dari 0!');
+      return;
+    }
+
+    if (!txDescription.trim()) {
+      setTxErrorMsg('Keterangan transaksi wajib diisi!');
+      return;
+    }
+
+    const timePart = new Date().toTimeString().split(' ')[0]; // "HH:MM:SS"
+    const finalDateStr = `${selectedDate} ${timePart}`;
+
+    const newTx: Transaction = {
+      id: `tx-manual-${Date.now()}`,
+      date: finalDateStr,
+      type: txType,
+      amount: Number(txAmount),
+      unit: txUnit,
+      category: determineCategory(txUnit, txType, txDescription) as any,
+      description: txDescription.trim(),
+      paymentMethod: txPaymentMethod,
+      referenceId: txReferenceId.trim() || undefined
+    };
+
+    if (onAddTransaction) {
+      onAddTransaction(newTx);
+      setTxSuccessMsg('Transaksi berhasil disimpan ke jurnal kas!');
+      setTxAmount(0);
+      setTxDescription('');
+      setTxReferenceId('');
+      setTimeout(() => setTxSuccessMsg(''), 2500);
+    } else {
+      setTxErrorMsg('Fungsi penyimpan transaksi tidak tersedia.');
+    }
+  };
 
   // --- SHU State & Parameters ---
   const [bagiHasilPortions, setBagiHasilPortions] = useState([
@@ -100,6 +203,60 @@ export default function FinancialReports({
     }).format(num);
   };
 
+  // --- GLOBAL PERIOD FILTERING HELPER ---
+  const isDateInPeriod = (dateStr: string) => {
+    if (!dateStr) return false;
+    const dateOnly = dateStr.split(' ')[0]; // YYYY-MM-DD
+    if (periodType === 'all') return true;
+    if (periodType === 'monthly') {
+      return dateOnly.startsWith(`${selectedYear}-${selectedMonth}`);
+    }
+    if (periodType === 'custom') {
+      return dateOnly >= startDate && dateOnly <= endDate;
+    }
+    return true;
+  };
+
+  const getEndPeriodDate = () => {
+    if (periodType === 'all') return '9999-12-31';
+    if (periodType === 'monthly') return `${selectedYear}-${selectedMonth}-31`;
+    return endDate;
+  };
+
+  // --- Retrospective Balance Sheet Helper ---
+  // To keep the Balance Sheet cumulative up to the end of selected period:
+  const getSavingsAtEnd = (memberId: string, savingsType: 'pokok' | 'wajib' | 'sukarela', currentVal: number) => {
+    const endBoundary = getEndPeriodDate();
+    const afterTransactions = transactions.filter(t => {
+      const tDate = t.date.split(' ')[0];
+      if (tDate <= endBoundary) return false;
+      const isMember = t.referenceId === memberId;
+      if (!isMember) return false;
+      if (savingsType === 'pokok' && t.category === 'Simpanan Pokok') return true;
+      if (savingsType === 'wajib' && t.category === 'Simpanan Wajib') return true;
+      if (savingsType === 'sukarela' && (t.category === 'Simpanan Sukarela' || t.category === 'Penarikan Sukarela' || t.category === 'Angsuran Pinjaman' || t.category === 'Bagi Hasil' || t.paymentMethod === 'deposit')) {
+        return true;
+      }
+      return false;
+    });
+    
+    let adjustedVal = currentVal;
+    afterTransactions.forEach(t => {
+      const isAdd = t.type === 'kas_masuk';
+      const amt = t.amount;
+      if (savingsType === 'sukarela' && t.paymentMethod === 'deposit') {
+        adjustedVal += amt;
+      } else {
+        if (isAdd) {
+          adjustedVal -= amt;
+        } else {
+          adjustedVal += amt;
+        }
+      }
+    });
+    return Math.max(0, adjustedVal);
+  };
+
   // --- 1. DAILY CASH FLOW CALCULATIONS ---
   const dailyTransactions = transactions.filter(t => t.date.startsWith(selectedDate));
   const dailyInflow = dailyTransactions
@@ -114,26 +271,36 @@ export default function FinancialReports({
 
   // --- 2. RUGI LABA (INCOME STATEMENT) ---
   // Wartel Unit
-  const wartelRevenues = wartelRecords.reduce((sum, r) => sum + r.sellingPrice, 0);
-  const wartelCost = wartelRecords.reduce((sum, r) => sum + r.costPrice, 0);
+  const wartelRevenues = wartelRecords
+    .filter(r => isDateInPeriod(r.date))
+    .reduce((sum, r) => sum + r.sellingPrice, 0);
+  const wartelCost = wartelRecords
+    .filter(r => isDateInPeriod(r.date))
+    .reduce((sum, r) => sum + r.costPrice, 0);
   const wartelNetProfit = wartelRevenues - wartelCost;
 
   // Simpan Pinjam Unit (Interest Earned)
   const spRevenues = loans.reduce((sum, l) => {
-    return sum + l.repaymentHistory.reduce((s, r) => s + r.interestPaid, 0);
+    return sum + l.repaymentHistory
+      .filter(r => isDateInPeriod(r.date))
+      .reduce((s, r) => s + r.interestPaid, 0);
   }, 0);
   const spNetProfit = spRevenues;
 
   // Pertokoan Unit
-  const tokoRevenues = sales.reduce((sum, s) => sum + s.totalAmount, 0);
-  const tokoCost = sales.reduce((sum, s) => {
-    return sum + s.items.reduce((sc, item) => sc + (item.costPrice * item.quantity), 0);
-  }, 0);
+  const tokoRevenues = sales
+    .filter(s => isDateInPeriod(s.date))
+    .reduce((sum, s) => sum + s.totalAmount, 0);
+  const tokoCost = sales
+    .filter(s => isDateInPeriod(s.date))
+    .reduce((sum, s) => {
+      return sum + s.items.reduce((sc, item) => sc + (item.costPrice * item.quantity), 0);
+    }, 0);
   const tokoNetProfit = tokoRevenues - tokoCost;
 
   // Allocated Operasional Costs
   const allocatedOperasional = transactions
-    .filter(t => t.unit === 'umum' && t.category === 'Biaya Operasional')
+    .filter(t => isDateInPeriod(t.date) && t.unit === 'umum' && t.category === 'Biaya Operasional')
     .reduce((sum, t) => sum + t.amount, 0);
 
   const consolidatedRevenue = wartelRevenues + spRevenues + tokoRevenues;
@@ -143,19 +310,38 @@ export default function FinancialReports({
 
   // --- 3. CONSOLIDATED BALANCE SHEET ---
   const cashOnHand = transactions
+    .filter(t => {
+      const tDate = t.date.split(' ')[0];
+      return tDate <= getEndPeriodDate();
+    })
     .reduce((sum, t) => sum + (t.type === 'kas_masuk' ? t.amount : -t.amount), 0);
+
   const receivablesLoans = loans
-    .filter(l => l.status === 'aktif')
-    .reduce((sum, l) => sum + l.remainingBalance, 0);
+    .filter(l => l.startDate && l.startDate <= getEndPeriodDate())
+    .reduce((sum, l) => {
+      const principalBorrowed = l.amountRequested;
+      const principalPaidBeforeOrEnd = l.repaymentHistory
+        .filter(r => r.date <= getEndPeriodDate())
+        .reduce((s, r) => s + r.principalPaid, 0);
+      const remainingAtEnd = Math.max(0, principalBorrowed - principalPaidBeforeOrEnd);
+      return sum + remainingAtEnd;
+    }, 0);
+
   const inventoryAssetVal = products
     .reduce((sum, p) => sum + (p.costPrice * p.stock), 0);
   const totalAssets = cashOnHand + receivablesLoans + inventoryAssetVal;
 
-  const liabilitiesSavingsSukarela = members.reduce((sum, m) => sum + m.savings.sukarela, 0);
+  const liabilitiesSavingsSukarela = members.reduce((sum, m) => {
+    return sum + getSavingsAtEnd(m.memberId, 'sukarela', m.savings.sukarela);
+  }, 0);
   const totalLiabilities = liabilitiesSavingsSukarela;
 
-  const equitySavingsPokok = members.reduce((sum, m) => sum + m.savings.pokok, 0);
-  const equitySavingsWajib = members.reduce((sum, m) => sum + m.savings.wajib, 0);
+  const equitySavingsPokok = members.reduce((sum, m) => {
+    return sum + getSavingsAtEnd(m.memberId, 'pokok', m.savings.pokok);
+  }, 0);
+  const equitySavingsWajib = members.reduce((sum, m) => {
+    return sum + getSavingsAtEnd(m.memberId, 'wajib', m.savings.wajib);
+  }, 0);
   const equityReserves = totalAssets - totalLiabilities - equitySavingsPokok - equitySavingsWajib;
   const totalEquity = equitySavingsPokok + equitySavingsWajib + equityReserves;
 
@@ -707,68 +893,321 @@ export default function FinancialReports({
         </div>
       </div>
 
+      {/* ⚙️ FILTER PERIODE LAPORAN GLOBAL */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-3xs space-y-4 print:hidden animate-fade-in" id="reports-global-period-filter">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="space-y-0.5">
+            <span className="text-[10px] text-blue-600 font-extrabold uppercase tracking-wider block">Otoritas Filter Laporan</span>
+            <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+              <Calendar size={15} className="text-blue-600" />
+              Pilih Periode Pembukuan Real-time
+            </h3>
+            <p className="text-xs text-slate-400 font-medium">Sistem menyaring seluruh data transaksi unit usaha secara live sesuai rentang yang dipilih</p>
+          </div>
+          <div className="bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-100 flex items-center gap-1.5 self-start sm:self-center">
+            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">
+              {periodType === 'all' ? 'Tampilkan Semua Data' : periodType === 'monthly' ? `Bulan ${selectedMonth}/${selectedYear}` : `${startDate} s/d ${endDate}`}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-700">
+          {/* Column 1: Period Mode Selection */}
+          <div className="space-y-1.5">
+            <label className="font-bold text-slate-600 block">Mode Periode</label>
+            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg">
+              {(['all', 'monthly', 'custom'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setPeriodType(type)}
+                  className={`py-1.5 rounded-md font-bold text-[11px] transition-all cursor-pointer ${
+                    periodType === type 
+                      ? 'bg-white text-slate-800 shadow-2xs' 
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  {type === 'all' ? 'Semua' : type === 'monthly' ? 'Bulanan' : 'Kustom'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Column 2: Monthly Options */}
+          {periodType === 'monthly' && (
+            <div className="grid grid-cols-2 gap-2 animate-fade-in">
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-600 block">Pilih Bulan</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  {[
+                    { val: '01', name: 'Januari' },
+                    { val: '02', name: 'Februari' },
+                    { val: '03', name: 'Maret' },
+                    { val: '04', name: 'April' },
+                    { val: '05', name: 'Mei' },
+                    { val: '06', name: 'Juni' },
+                    { val: '07', name: 'Juli' },
+                    { val: '08', name: 'Agustus' },
+                    { val: '09', name: 'September' },
+                    { val: '10', name: 'Oktober' },
+                    { val: '11', name: 'November' },
+                    { val: '12', name: 'Desember' },
+                  ].map(m => (
+                    <option key={m.val} value={m.val}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-600 block">Tahun</label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  {['2024', '2025', '2026', '2027', '2028'].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Column 3: Custom Date Options */}
+          {periodType === 'custom' && (
+            <div className="grid grid-cols-2 gap-2 animate-fade-in col-span-2">
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-600 block">Tanggal Mulai</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold text-slate-800 text-xs focus:outline-none"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-600 block">Tanggal Akhir</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold text-slate-800 text-xs focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
+
+          {periodType === 'all' && (
+            <div className="md:col-span-2 flex items-center justify-start p-2 bg-slate-50 rounded-lg border border-slate-150 text-[11px] text-slate-500 font-bold">
+              Mode ini melampirkan seluruh catatan transaksi koperasi dari waktu pertama kali pembukuan diaktifkan tanpa batas tanggal.
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* --- REPORT VIEW 1: DAILY CASH FLOWS --- */}
       {reportTab === 'kas' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" id="rep-daily-cash">
           
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4" id="cash-setup-card">
-            <div className="border-b border-slate-100 pb-3">
-              <h3 className="font-extrabold text-slate-900 text-sm">Pilih Tanggal Laporan</h3>
-              <p className="text-xs text-slate-400 font-medium">Saring mutasi kas berdasarkan kalender akuntansi</p>
+          <div className="space-y-6 lg:col-span-1">
+            {/* Setup & Rekapitulasi Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4" id="cash-setup-card">
+              <div className="border-b border-slate-100 pb-3">
+                <h3 className="font-extrabold text-slate-900 text-sm">Pilih Tanggal Laporan</h3>
+                <p className="text-xs text-slate-400 font-medium">Saring mutasi kas berdasarkan kalender akuntansi</p>
+              </div>
+
+              <div className="space-y-4 text-xs text-slate-700">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Pilih dari Tanggal Aktif</label>
+                  <select
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold text-slate-800 focus:outline-none"
+                  >
+                    {uniqueDates.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Atau Input Tanggal Manual</label>
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
+                      <Calendar size={14} />
+                    </span>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => {
+                        if (e.target.value) setSelectedDate(e.target.value);
+                      }}
+                      className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono text-xs font-semibold text-slate-800 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 pt-3.5">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">Rekapitulasi Arus Kas Harian</span>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-semibold">Kas Masuk (Inflow):</span>
+                      <span className="font-mono font-bold text-blue-600">+{formatIDR(dailyInflow)}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500 font-semibold">Kas Keluar (Outflow):</span>
+                      <span className="font-mono font-bold text-rose-500">-{formatIDR(dailyOutflow)}</span>
+                    </div>
+                    
+                    <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs font-bold text-slate-850">
+                      <span>Selisih Bersih (Net):</span>
+                      <span className={`font-mono ${dailyNet >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
+                        {dailyNet >= 0 ? '+' : ''}{formatIDR(dailyNet)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-4 text-xs text-slate-700">
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-600 block">Pilih dari Tanggal Aktif</label>
-                <select
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold text-slate-800"
-                >
-                  {uniqueDates.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
+            {/* Input Transaksi Kas Baru Card */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4" id="cash-input-card">
+              <div className="border-b border-slate-100 pb-3">
+                <span className="text-[10px] text-blue-600 font-extrabold uppercase tracking-wider block">Otoritas Bendahara</span>
+                <h3 className="font-extrabold text-slate-900 text-sm flex items-center gap-1">
+                  <Plus size={15} className="text-blue-600" />
+                  Input Transaksi Kas Baru
+                </h3>
+                <p className="text-xs text-slate-400 font-medium">Tambah pencatatan aliran kas masuk/keluar ke dalam jurnal kas secara real-time</p>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-600 block">Atau Input Tanggal Manual</label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none">
-                    <Calendar size={14} />
-                  </span>
+              <form onSubmit={handleTxSubmit} className="space-y-3.5 text-xs text-slate-700">
+                {/* 1. Transaction Type */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Jenis Aliran Kas</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setTxType('kas_masuk')}
+                      className={`py-2 px-3 rounded-lg font-bold border transition-colors cursor-pointer ${
+                        txType === 'kas_masuk' 
+                          ? 'bg-blue-50 border-blue-200 text-blue-700' 
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      KAS MASUK (Debit)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTxType('kas_keluar')}
+                      className={`py-2 px-3 rounded-lg font-bold border transition-colors cursor-pointer ${
+                        txType === 'kas_keluar' 
+                          ? 'bg-rose-50 border-rose-200 text-rose-700' 
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      KAS KELUAR (Kredit)
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Business Unit */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Unit Bisnis / Sektor</label>
+                  <select
+                    value={txUnit}
+                    onChange={(e) => setTxUnit(e.target.value as any)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none"
+                  >
+                    <option value="umum">Umum (Kantor Pusat)</option>
+                    <option value="simpan_pinjam">Unit Simpan Pinjam</option>
+                    <option value="pertokoan">Unit Pertokoan</option>
+                    <option value="wartel">Unit Telekomunikasi (Wartel)</option>
+                  </select>
+                </div>
+
+
+
+                {/* 4. Amount input */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Nominal Dana (Rupiah)</label>
                   <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => {
-                      if (e.target.value) setSelectedDate(e.target.value);
-                    }}
-                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg font-mono text-xs font-semibold text-slate-800 focus:outline-none"
+                    type="number"
+                    min="0"
+                    required
+                    placeholder="Contoh: 500000"
+                    value={txAmount || ''}
+                    onChange={(e) => setTxAmount(Math.max(0, Number(e.target.value)))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg font-mono font-bold text-slate-800 text-xs"
                   />
                 </div>
-              </div>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3 pt-3.5">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">Rekapitulasi Arus Kas Harian</span>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-500 font-semibold">Kas Masuk (Inflow):</span>
-                    <span className="font-mono font-bold text-blue-600">+{formatIDR(dailyInflow)}</span>
+                {/* 5. Description */}
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Keterangan / Deskripsi</label>
+                  <textarea
+                    required
+                    rows={2}
+                    placeholder="Tuliskan detail transaksi..."
+                    value={txDescription}
+                    onChange={(e) => setTxDescription(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 text-xs focus:outline-none"
+                  />
+                </div>
+
+                {/* 6. Payment method & optional Member ID */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-600 block">Metode Pembayaran</label>
+                    <select
+                      value={txPaymentMethod}
+                      onChange={(e) => setTxPaymentMethod(e.target.value as any)}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-[11px] focus:outline-none"
+                    >
+                      <option value="cash">Tunai (Cash)</option>
+                      <option value="deposit">Deposit (Tabungan)</option>
+                      <option value="piutang">Piutang / Kredit</option>
+                    </select>
                   </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-500 font-semibold">Kas Keluar (Outflow):</span>
-                    <span className="font-mono font-bold text-rose-500">-{formatIDR(dailyOutflow)}</span>
-                  </div>
-                  
-                  <div className="pt-2 border-t border-slate-200 flex justify-between items-center text-xs font-bold text-slate-850">
-                    <span>Selisih Bersih (Net):</span>
-                    <span className={`font-mono ${dailyNet >= 0 ? 'text-blue-600' : 'text-rose-600'}`}>
-                      {dailyNet >= 0 ? '+' : ''}{formatIDR(dailyNet)}
-                    </span>
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-600 block">ID Ref / Anggota (Opsional)</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: M-001"
+                      value={txReferenceId}
+                      onChange={(e) => setTxReferenceId(e.target.value)}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-[11px]"
+                    />
                   </div>
                 </div>
-              </div>
+
+                {txErrorMsg && (
+                  <div className="bg-rose-50 border border-rose-100 p-2 rounded-lg text-rose-800 text-[10px] font-semibold flex items-center gap-1.5">
+                    <AlertCircle size={13} />
+                    <span>{txErrorMsg}</span>
+                  </div>
+                )}
+                {txSuccessMsg && (
+                  <div className="bg-emerald-50 border border-emerald-100 p-2 rounded-lg text-emerald-800 text-[10px] font-semibold flex items-center gap-1.5">
+                    <CheckCircle2 size={13} />
+                    <span>{txSuccessMsg}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl cursor-pointer transition-colors shadow-2xs flex items-center justify-center gap-1.5"
+                >
+                  <CheckCircle2 size={14} />
+                  Simpan Transaksi Kas
+                </button>
+              </form>
             </div>
           </div>
 

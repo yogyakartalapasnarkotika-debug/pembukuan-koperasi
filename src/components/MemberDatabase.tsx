@@ -13,7 +13,9 @@ import {
   Check, 
   AlertCircle,
   X,
-  CreditCard
+  CreditCard,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 
 interface MemberDatabaseProps {
@@ -21,13 +23,17 @@ interface MemberDatabaseProps {
   transactions: Transaction[];
   loans: Loan[];
   onAddMember: (newMember: Member, initialDeposit: number) => void;
+  onEditMember?: (updatedMember: Member) => void;
+  onDeleteMember?: (memberId: string) => void;
 }
 
 export default function MemberDatabase({
   members,
   transactions,
   loans,
-  onAddMember
+  onAddMember,
+  onEditMember,
+  onDeleteMember
 }: MemberDatabaseProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -38,6 +44,56 @@ export default function MemberDatabase({
   const [formPhone, setFormPhone] = useState('');
   const [formAddress, setFormAddress] = useState('');
   const [initialSukarela, setInitialSukarela] = useState(0);
+
+  // --- Edit Member Form State ---
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editAddress, setEditAddress] = useState('');
+  const [editStatus, setEditStatus] = useState<'aktif' | 'non-aktif'>('aktif');
+  const [editPokok, setEditPokok] = useState(0);
+  const [editWajib, setEditWajib] = useState(0);
+  const [editSukarela, setEditSukarela] = useState(0);
+
+  const handleOpenEditModal = (member: Member) => {
+    setEditingMember(member);
+    setEditName(member.name);
+    setEditPhone(member.phone);
+    setEditAddress(member.address);
+    setEditStatus(member.status);
+    setEditPokok(member.savings.pokok);
+    setEditWajib(member.savings.wajib);
+    setEditSukarela(member.savings.sukarela);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMember) return;
+
+    const updated: Member = {
+      ...editingMember,
+      name: editName,
+      phone: editPhone,
+      address: editAddress,
+      status: editStatus,
+      savings: {
+        pokok: Number(editPokok),
+        wajib: Number(editWajib),
+        sukarela: Number(editSukarela)
+      }
+    };
+
+    if (onEditMember) {
+      onEditMember(updated);
+    }
+    
+    // Update selectedMember if it's currently selected
+    if (selectedMember?.id === editingMember.id) {
+      setSelectedMember(updated);
+    }
+
+    setEditingMember(null);
+  };
 
   // --- Search & Filter ---
   const filteredMembers = members.filter(m => 
@@ -188,13 +244,37 @@ export default function MemberDatabase({
                           )}
                         </td>
                         <td className="p-3 text-right whitespace-nowrap">
-                          <button
-                            onClick={() => setSelectedMember(m)}
-                            className="text-blue-600 hover:text-blue-700 font-bold inline-flex items-center gap-0.5 cursor-pointer hover:underline"
-                            id={`btn-view-${m.memberId}`}
-                          >
-                            <Eye size={14} /> Detail
-                          </button>
+                          <div className="flex items-center justify-end gap-3">
+                            <button
+                              onClick={() => setSelectedMember(m)}
+                              className="text-blue-600 hover:text-blue-700 font-bold inline-flex items-center gap-0.5 cursor-pointer hover:underline"
+                              id={`btn-view-${m.memberId}`}
+                              title="Detail Anggota"
+                            >
+                              <Eye size={13} /> <span className="sr-only sm:not-sr-only">Detail</span>
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditModal(m)}
+                              className="text-amber-600 hover:text-amber-700 font-bold inline-flex items-center gap-0.5 cursor-pointer hover:underline"
+                              id={`btn-edit-${m.memberId}`}
+                              title="Edit Anggota"
+                            >
+                              <Edit2 size={13} /> <span className="sr-only sm:not-sr-only">Edit</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`Apakah Anda yakin ingin menghapus anggota ${m.name} (${m.memberId}) dari database?`)) {
+                                  if (onDeleteMember) onDeleteMember(m.id);
+                                  if (selectedMember?.id === m.id) setSelectedMember(null);
+                                }
+                              }}
+                              className="text-rose-600 hover:text-rose-700 font-bold inline-flex items-center gap-0.5 cursor-pointer hover:underline"
+                              id={`btn-delete-${m.memberId}`}
+                              title="Hapus Anggota"
+                            >
+                              <Trash2 size={13} /> <span className="sr-only sm:not-sr-only">Hapus</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -449,6 +529,138 @@ export default function MemberDatabase({
                   className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer inline-flex items-center gap-1 shadow-xs transition-colors"
                 >
                   <Check size={14} /> Daftarkan Anggota
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Member Modal */}
+      {editingMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4" id="member-edit-modal">
+          <div className="bg-white rounded-xl shadow-lg border border-slate-100 w-full max-w-md p-6 space-y-4">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-slate-800 text-sm">Formulir Edit Data Anggota</h3>
+              <button 
+                onClick={() => setEditingMember(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4 text-xs text-slate-700">
+              
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">ID Anggota (Tidak dapat diubah)</label>
+                <input
+                  type="text"
+                  disabled
+                  value={editingMember.memberId}
+                  className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">Nama Lengkap Sesuai KTP <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Joko Prasetyo"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">Nomor Telepon / WhatsApp <span className="text-red-500">*</span></label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="Contoh: 081234567890"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">Alamat Tempat Tinggal</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Sleman, Yogyakarta"
+                  value={editAddress}
+                  onChange={(e) => setEditAddress(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">Status Keanggotaan</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as 'aktif' | 'non-aktif')}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-850"
+                >
+                  <option value="aktif">Aktif</option>
+                  <option value="non-aktif">Non-Aktif</option>
+                </select>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3 space-y-2.5">
+                <span className="font-bold text-slate-700 block">Koreksi Saldo Simpanan (Khusus Admin/Operator)</span>
+                
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 font-bold block">Pokok (Rp)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editPokok}
+                      onChange={(e) => setEditPokok(Number(e.target.value))}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 font-bold block">Wajib (Rp)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editWajib}
+                      onChange={(e) => setEditWajib(Number(e.target.value))}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-slate-500 font-bold block">Sukarela (Rp)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editSukarela}
+                      onChange={(e) => setEditSukarela(Number(e.target.value))}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-emerald-700"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingMember(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg cursor-pointer transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer inline-flex items-center gap-1 shadow-xs transition-colors"
+                >
+                  <Check size={14} /> Simpan Perubahan
                 </button>
               </div>
 

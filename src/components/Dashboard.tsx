@@ -17,7 +17,11 @@ import {
   CheckCircle2,
   Clock,
   Settings,
-  UserPlus
+  UserPlus,
+  Edit2,
+  Trash2,
+  X,
+  Check
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -30,6 +34,8 @@ interface DashboardProps {
   onUpdateCooperativeName: (name: string) => void;
   accounts: UserAccount[];
   onRegisterAccount: (acc: UserAccount) => void;
+  onUpdateAccount?: (acc: UserAccount) => void;
+  onDeleteAccount?: (username: string) => void;
   currentUser: UserAccount;
   onNavigate: (tab: string, subTab?: string) => void;
 }
@@ -44,6 +50,8 @@ export default function Dashboard({
   onUpdateCooperativeName,
   accounts,
   onRegisterAccount,
+  onUpdateAccount,
+  onDeleteAccount,
   currentUser,
   onNavigate
 }: DashboardProps) {
@@ -58,6 +66,36 @@ export default function Dashboard({
   const [newRole, setNewRole] = useState<string>('operator_sp');
   const [regSuccess, setRegSuccess] = useState<string | null>(null);
   const [regError, setRegError] = useState<string | null>(null);
+
+  // --- Edit Account Form State ---
+  const [editingAccount, setEditingAccount] = useState<UserAccount | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editPin, setEditPin] = useState('');
+  const [editRole, setEditRole] = useState<string>('operator_sp');
+
+  const handleOpenEditAccount = (acc: UserAccount) => {
+    setEditingAccount(acc);
+    setEditFullName(acc.name);
+    setEditPin(acc.pin);
+    setEditRole(acc.role);
+  };
+
+  const handleSaveEditAccount = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAccount) return;
+
+    const updated: UserAccount = {
+      ...editingAccount,
+      name: editFullName,
+      pin: editPin,
+      role: editRole
+    };
+
+    if (onUpdateAccount) {
+      onUpdateAccount(updated);
+    }
+    setEditingAccount(null);
+  };
 
   // --- Financial Calculations ---
   // 1. Cash Balance
@@ -881,23 +919,55 @@ export default function Dashboard({
                   .replace('operator_wartel', 'Op. Wartel')
                   .replace('verifikator_staff', 'Verifikator Staff')
                   .replace('verifikator_bendahara', 'Verifikator Bendahara')
-                  .replace('verifikator_ketua', 'Ketua Koperasi');
+                  .replace('verifikator_ketua', 'Ketua Koperasi')
+                  .replace('admin', 'Super Admin');
 
-                const isVerifier = acc.role.startsWith('verifikator');
+                const isVerifier = acc.role.startsWith('verifikator') || acc.role === 'admin';
 
                 return (
                   <div key={acc.username} className="bg-white p-2.5 rounded-lg border border-slate-200 flex justify-between items-center gap-2 shadow-2xs">
-                    <div className="space-y-0.5">
-                      <span className="text-[11px] font-bold text-slate-850 block leading-tight">{acc.name}</span>
+                    <div className="space-y-0.5 flex-1 min-w-0">
+                      <span className="text-[11px] font-bold text-slate-850 block leading-tight truncate">{acc.name}</span>
                       <span className="text-[9px] text-slate-500 font-medium block">@{acc.username}</span>
                     </div>
-                    <div className="text-right flex flex-col items-end gap-1">
-                      <span className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wide leading-none ${
-                        isVerifier ? 'bg-indigo-50 text-indigo-600 border border-indigo-150' : 'bg-emerald-50 text-emerald-600 border border-emerald-150'
-                      }`}>
-                        {roleLabel}
-                      </span>
-                      <span className="text-[8px] font-mono text-slate-500 font-semibold">Pass: <strong className="text-slate-800">{acc.pin}</strong></span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right flex flex-col items-end gap-1">
+                        <span className={`px-1.5 py-0.2 rounded text-[8px] font-black uppercase tracking-wide leading-none ${
+                          acc.role === 'admin' 
+                            ? 'bg-rose-50 text-rose-650 border border-rose-150' 
+                            : isVerifier 
+                              ? 'bg-indigo-50 text-indigo-600 border border-indigo-150' 
+                              : 'bg-emerald-50 text-emerald-600 border border-emerald-150'
+                        }`}>
+                          {roleLabel}
+                        </span>
+                        <span className="text-[8px] font-mono text-slate-500 font-semibold">Pass: <strong className="text-slate-800">{acc.pin}</strong></span>
+                      </div>
+                      
+                      {currentUser.role === 'admin' && (
+                        <div className="flex items-center gap-1 border-l border-slate-150 pl-2 ml-1">
+                          <button
+                            onClick={() => handleOpenEditAccount(acc)}
+                            className="p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded transition-colors cursor-pointer"
+                            title="Edit Pengguna"
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          {acc.username !== 'admin' && (
+                            <button
+                              onClick={() => {
+                                if (confirm(`Apakah Anda yakin ingin menghapus pengguna @${acc.username} (${acc.name})?`)) {
+                                  if (onDeleteAccount) onDeleteAccount(acc.username);
+                                }
+                              }}
+                              className="p-1 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+                              title="Hapus Pengguna"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -906,6 +976,101 @@ export default function Dashboard({
           </div>
         </div>
       </div>
+      )}
+
+      {/* Edit Account Modal */}
+      {editingAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4" id="account-edit-modal">
+          <div className="bg-white rounded-xl shadow-lg border border-slate-100 w-full max-w-sm p-6 space-y-4">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-slate-850 text-sm">Formulir Edit Data Pengguna</h3>
+              <button 
+                onClick={() => setEditingAccount(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditAccount} className="space-y-4 text-xs text-slate-700">
+              
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">Username (Tidak dapat diubah)</label>
+                <input
+                  type="text"
+                  disabled
+                  value={editingAccount.username}
+                  className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">Nama Lengkap Pengguna <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Joko Prasetyo"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">Password / PIN Baru <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="PIN atau Password"
+                  value={editPin}
+                  onChange={(e) => setEditPin(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600">Kewenangan / Peran Jabatan</label>
+                <select
+                  value={editRole}
+                  onChange={(e) => setEditRole(e.target.value)}
+                  disabled={editingAccount.username === 'admin'}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-850"
+                >
+                  {editingAccount.username === 'admin' ? (
+                    <option value="admin">Super Admin</option>
+                  ) : (
+                    <>
+                      <option value="operator_sp">Operator Unit Simpan Pinjam (USP)</option>
+                      <option value="operator_toko">Operator Unit Pertokoan (Toko)</option>
+                      <option value="operator_wartel">Operator Unit Telekomunikasi (Wartel)</option>
+                      <option value="verifikator_staff">Verifikator Jabatan Staff</option>
+                      <option value="verifikator_bendahara">Verifikator Jabatan Bendahara</option>
+                      <option value="verifikator_ketua">Verifikator Jabatan Ketua</option>
+                    </>
+                  )}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditingAccount(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg cursor-pointer transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg cursor-pointer inline-flex items-center gap-1 shadow-xs transition-colors"
+                >
+                  <Check size={14} /> Simpan Perubahan
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
       )}
 
     </div>

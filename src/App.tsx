@@ -33,6 +33,21 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  // Synchronous first-time reset of sample data to prepare for real production transactions
+  const hasResetSample = localStorage.getItem('kop_prod_reset_v2');
+  if (!hasResetSample) {
+    const keysToClear = [
+      'kop_members', 'kop_loans', 'kop_products', 'kop_transactions', 
+      'kop_wartel', 'kop_sales', 'kop_accounts', 'kop_current_user',
+      'kop_cooperative_name', 'kop_wartel_expenses', 
+      'kop_wartel_sharing_percents_4', 'kop_toko_bagi_hasil', 
+      'usp_capital_contributions', 'usp_settings_admin_fee', 
+      'usp_settings_interest_rate', 'usp_settings_max_tenor', 'usp_settings_max_plafon'
+    ];
+    keysToClear.forEach(key => localStorage.removeItem(key));
+    localStorage.setItem('kop_prod_reset_v2', 'true');
+  }
+
   const [cooperativeName, setCooperativeName] = useState<string>(() => {
     return localStorage.getItem('kop_cooperative_name') || 'Koperasi Karya Mukti';
   });
@@ -60,11 +75,11 @@ export default function App() {
     }
     return [
       { username: 'admin', name: 'Super Admin', role: 'admin', pin: 'admin' },
-      { username: 'ketua', name: 'Danang Andriyanto', role: 'verifikator_ketua', pin: '3333' },
-      { username: 'bendahara', name: 'Hendra Wijaya', role: 'verifikator_bendahara', pin: '2222' },
-      { username: 'op_sp', name: 'Siti Aminah', role: 'operator_sp', pin: '4444' },
-      { username: 'op_toko', name: 'Budi Santoso', role: 'operator_toko', pin: '5555' },
-      { username: 'op_wartel', name: 'Dewi Sartika', role: 'operator_wartel', pin: '6666' }
+      { username: 'ketua', name: 'Ketua Koperasi', role: 'verifikator_ketua', pin: '1234' },
+      { username: 'bendahara', name: 'Bendahara Koperasi', role: 'verifikator_bendahara', pin: '1234' },
+      { username: 'op_sp', name: 'Operator Simpan Pinjam', role: 'operator_sp', pin: '1234' },
+      { username: 'op_toko', name: 'Operator Pertokoan', role: 'operator_toko', pin: '1234' },
+      { username: 'op_wartel', name: 'Operator Wartel', role: 'operator_wartel', pin: '1234' }
     ];
   });
 
@@ -243,6 +258,25 @@ export default function App() {
   };
 
   // --- ACTIONS & SYNCHRONIZATION ENGINES ---
+
+  const handleEditMember = (updatedMember: Member) => {
+    setMembers(prev => prev.map(m => m.id === updatedMember.id ? updatedMember : m));
+  };
+
+  const handleDeleteMember = (memberId: string) => {
+    setMembers(prev => prev.filter(m => m.id !== memberId));
+  };
+
+  const handleUpdateAccount = (updatedAcc: UserAccount) => {
+    setAccounts(prev => prev.map(a => a.username === updatedAcc.username ? updatedAcc : a));
+    if (currentUser && currentUser.username === updatedAcc.username) {
+      setCurrentUser(updatedAcc);
+    }
+  };
+
+  const handleDeleteAccount = (username: string) => {
+    setAccounts(prev => prev.filter(a => a.username !== username));
+  };
 
   // 1. Add Member
   const handleAddMember = (newMember: Member, initialDeposit: number) => {
@@ -770,19 +804,9 @@ export default function App() {
                     <span className="block text-slate-400">Pass: <strong className="text-white">admin</strong></span>
                   </div>
                   <div className="bg-slate-950/40 p-2 rounded border border-slate-850">
-                    <span className="font-extrabold text-indigo-400 block">Bendahara</span>
-                    <span className="text-slate-400">User: <strong className="text-white">bendahara</strong></span>
-                    <span className="block text-slate-400">Pass: <strong className="text-white">2222</strong></span>
-                  </div>
-                  <div className="bg-slate-950/40 p-2 rounded border border-slate-850">
-                    <span className="font-extrabold text-emerald-400 block">Op. Simpan Pinjam</span>
-                    <span className="text-slate-400">User: <strong className="text-white">op_sp</strong></span>
-                    <span className="block text-slate-400">Pass: <strong className="text-white">4444</strong></span>
-                  </div>
-                  <div className="bg-slate-950/40 p-2 rounded border border-slate-850">
-                    <span className="font-extrabold text-amber-400 block">Op. Pertokoan</span>
-                    <span className="text-slate-400">User: <strong className="text-white">op_toko</strong></span>
-                    <span className="block text-slate-400">Pass: <strong className="text-white">5555</strong></span>
+                    <span className="font-extrabold text-indigo-400 block">Pengurus / Staff</span>
+                    <span className="text-slate-400">User: <strong className="text-slate-200">ketua / bendahara / op_sp / op_toko / op_wartel</strong></span>
+                    <span className="block text-slate-400">Pass: <strong className="text-white">1234</strong></span>
                   </div>
                 </div>
                 <p className="text-[9px] text-slate-500 italic mt-1 text-center">
@@ -1126,6 +1150,8 @@ export default function App() {
               onUpdateCooperativeName={setCooperativeName}
               accounts={accounts}
               onRegisterAccount={(newAcc) => setAccounts(prev => [...prev, newAcc])}
+              onUpdateAccount={handleUpdateAccount}
+              onDeleteAccount={handleDeleteAccount}
               currentUser={currentUser}
               onNavigate={(tab, subTab) => {
                 setActiveTab(tab);
@@ -1140,6 +1166,8 @@ export default function App() {
               transactions={transactions}
               loans={loans}
               onAddMember={handleAddMember}
+              onEditMember={handleEditMember}
+              onDeleteMember={handleDeleteMember}
             />
           )}
 

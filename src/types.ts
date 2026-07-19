@@ -99,6 +99,7 @@ export interface PertokoanProduct {
   costPrice: number;
   sellingPrice: number;
   unit: string; // kg, pcs, botol, dll.
+  wartelServiceType?: 'telepon' | 'pulsa' | 'paket_data' | 'voucher_game' | 'lainnya';
 }
 
 export interface PertokoanSaleItem {

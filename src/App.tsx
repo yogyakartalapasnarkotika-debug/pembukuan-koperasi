@@ -128,7 +128,72 @@ export default function App() {
 
   const [products, setProducts] = useState<PertokoanProduct[]>(() => {
     const saved = localStorage.getItem('kop_products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    let loaded: PertokoanProduct[] = saved ? JSON.parse(saved) : [];
+    
+    const defaultWartels: PertokoanProduct[] = [
+      {
+        id: 'prd-w-pulsa',
+        code: 'PRD-W-PULSA',
+        name: 'Pulsa Elektrik (Wartel)',
+        category: 'Wartel',
+        stock: 150,
+        costPrice: 10000,
+        sellingPrice: 12000,
+        unit: 'transaksi',
+        wartelServiceType: 'pulsa'
+      },
+      {
+        id: 'prd-w-data',
+        code: 'PRD-W-DATA',
+        name: 'Paket Data Internet (Wartel)',
+        category: 'Wartel',
+        stock: 80,
+        costPrice: 20000,
+        sellingPrice: 25000,
+        unit: 'transaksi',
+        wartelServiceType: 'paket_data'
+      },
+      {
+        id: 'prd-w-telepon',
+        code: 'PRD-W-TELEPON',
+        name: 'Koin Layanan Bilik Telepon (Wartel)',
+        category: 'Wartel',
+        stock: 500,
+        costPrice: 1000,
+        sellingPrice: 2000,
+        unit: 'menit',
+        wartelServiceType: 'telepon'
+      },
+      {
+        id: 'prd-w-game',
+        code: 'PRD-W-GAME',
+        name: 'Voucher Game Online (Wartel)',
+        category: 'Wartel',
+        stock: 100,
+        costPrice: 15000,
+        sellingPrice: 18000,
+        unit: 'pcs',
+        wartelServiceType: 'voucher_game'
+      },
+      {
+        id: 'prd-w-lainnya',
+        code: 'PRD-W-LAINNYA',
+        name: 'Layanan Wartel Lain-lain',
+        category: 'Wartel',
+        stock: 200,
+        costPrice: 5000,
+        sellingPrice: 7000,
+        unit: 'layanan',
+        wartelServiceType: 'lainnya'
+      }
+    ];
+
+    for (const p of defaultWartels) {
+      if (!loaded.some(item => item.id === p.id || item.code === p.code || item.wartelServiceType === p.wartelServiceType)) {
+        loaded.push(p);
+      }
+    }
+    return loaded;
   });
 
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
@@ -528,6 +593,17 @@ export default function App() {
         return m;
       }));
     }
+
+    // Automatically sync and deduct the retail product stock
+    setProducts(prevProducts => prevProducts.map(p => {
+      if (p.wartelServiceType === newRecord.serviceType) {
+        return {
+          ...p,
+          stock: Math.max(0, p.stock - (newRecord.quantity || 1))
+        };
+      }
+      return p;
+    }));
   };
 
   // 7. Add Pertokoan Sale POS
@@ -1178,6 +1254,8 @@ export default function App() {
               onAddWartelRecord={handleAddWartelRecord}
               activeSubTab={activeSubTab}
               onAddTransaction={(tx) => setTransactions(prev => [...prev, tx])}
+              products={products}
+              onUpdateProduct={handleEditProduct}
             />
           )}
 

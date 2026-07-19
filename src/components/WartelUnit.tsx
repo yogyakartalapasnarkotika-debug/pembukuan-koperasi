@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Member, WartelRecord, Transaction } from '../types';
+import { Member, WartelRecord, Transaction, PertokoanProduct } from '../types';
 import { 
   PhoneCall, 
   Smartphone, 
@@ -18,7 +18,11 @@ import {
   Percent,
   Sliders,
   DollarSign,
-  Printer
+  Printer,
+  Edit2,
+  Package,
+  Layers,
+  Check
 } from 'lucide-react';
 
 interface WartelUnitProps {
@@ -27,6 +31,8 @@ interface WartelUnitProps {
   onAddWartelRecord: (newRecord: WartelRecord) => void;
   activeSubTab?: string;
   onAddTransaction?: (tx: Transaction) => void;
+  products?: PertokoanProduct[];
+  onUpdateProduct?: (updatedProduct: PertokoanProduct) => void;
 }
 
 interface WartelExpense {
@@ -42,7 +48,9 @@ export default function WartelUnit({
   records,
   onAddWartelRecord,
   activeSubTab = 'kasir',
-  onAddTransaction
+  onAddTransaction,
+  products = [],
+  onUpdateProduct
 }: WartelUnitProps) {
   // --- Local sub-navigation tab ---
   const [localTab, setLocalTab] = useState<'kasir' | 'pengeluaran' | 'laporan'>(activeSubTab as any || 'kasir');
@@ -56,6 +64,47 @@ export default function WartelUnit({
 
   // --- Service forms state ---
   const [serviceType, setServiceType] = useState<'telepon' | 'pulsa' | 'paket_data' | 'voucher_game' | 'lainnya'>('pulsa');
+
+  // Auto-fill cost & selling prices based on the synced products list
+  React.useEffect(() => {
+    const matched = products.find(p => p.wartelServiceType === serviceType);
+    if (matched) {
+      setCostPrice(matched.costPrice);
+      setSellingPrice(matched.sellingPrice);
+    }
+  }, [serviceType, products]);
+
+  // --- State for Sync Product Update ---
+  const [editingProduct, setEditingProduct] = useState<PertokoanProduct | null>(null);
+  const [editStock, setEditStock] = useState<number>(0);
+  const [editCostPrice, setEditCostPrice] = useState<number>(0);
+  const [editSellingPrice, setEditSellingPrice] = useState<number>(0);
+  const [editProductName, setEditProductName] = useState<string>('');
+
+  const handleOpenEditProduct = (prod: PertokoanProduct) => {
+    setEditingProduct(prod);
+    setEditStock(prod.stock);
+    setEditCostPrice(prod.costPrice);
+    setEditSellingPrice(prod.sellingPrice);
+    setEditProductName(prod.name);
+  };
+
+  const handleSaveProductEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct || !onUpdateProduct) return;
+
+    const updated: PertokoanProduct = {
+      ...editingProduct,
+      name: editProductName,
+      stock: Number(editStock),
+      costPrice: Number(editCostPrice),
+      sellingPrice: Number(editSellingPrice)
+    };
+
+    onUpdateProduct(updated);
+    setEditingProduct(null);
+  };
+
   const [customerType, setCustomerType] = useState<'guest' | 'member'>('guest');
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [guestName, setGuestName] = useState('');
@@ -553,11 +602,66 @@ export default function WartelUnit({
           </div>
 
           {/* Right Quick Table List */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs lg:col-span-2 space-y-4">
-            <div>
-              <h3 className="font-extrabold text-slate-900 text-sm">Sirkulasi Transaksi Terbaru</h3>
-              <p className="text-xs text-slate-400 font-medium">Buku pantau transaksi counter pulsa dan bilik telepon harian</p>
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs lg:col-span-2 space-y-6">
+            
+            {/* Real-time Synced Products Stock & Values */}
+            <div className="bg-slate-50 border border-slate-150 rounded-xl p-4 space-y-3">
+              <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                <div className="flex items-center gap-1.5 text-blue-800">
+                  <Package size={16} className="text-blue-600 animate-pulse" />
+                  <span className="font-extrabold text-xs">Sinkronisasi Otomatis Unit Wartel & Pertokoan</span>
+                </div>
+                <span className="bg-blue-100 text-blue-800 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Stok Terhubung</span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+                {products.filter(p => p.wartelServiceType).map(prod => {
+                  return (
+                    <div key={prod.id} className="bg-white border border-slate-150 p-2.5 rounded-lg shadow-3xs hover:shadow-2xs transition-all space-y-2 flex flex-col justify-between">
+                      <div>
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] text-slate-400 font-mono font-medium">{prod.code}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                            prod.stock > 10 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                          }`}>
+                            {prod.stock} {prod.unit}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-slate-800 text-xs mt-1 truncate" title={prod.name}>
+                          {prod.name.replace(' (Wartel)', '')}
+                        </h4>
+                      </div>
+                      
+                      <div className="border-t border-slate-100 pt-1.5 space-y-0.5 text-[10px]">
+                        <div className="flex justify-between text-slate-400">
+                          <span>Pokok:</span>
+                          <span className="font-mono text-slate-600">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(prod.costPrice)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-400">
+                          <span>Jual:</span>
+                          <span className="font-mono font-bold text-blue-700">{new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(prod.sellingPrice)}</span>
+                        </div>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditProduct(prod)}
+                        className="w-full mt-1 py-1 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 font-extrabold text-[10px] rounded flex items-center justify-center gap-1 transition-all cursor-pointer border border-transparent hover:border-blue-150"
+                      >
+                        <Edit2 size={10} />
+                        Update Produk
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
+
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-sm">Sirkulasi Transaksi Terbaru</h3>
+                <p className="text-xs text-slate-400 font-medium">Buku pantau transaksi counter pulsa dan bilik telepon harian</p>
+              </div>
 
             <div className="overflow-x-auto border border-slate-200 rounded-xl shadow-xs">
               <table className="w-full text-left border-collapse text-xs">
@@ -622,6 +726,7 @@ export default function WartelUnit({
               </table>
             </div>
           </div>
+        </div>
 
         </div>
       )}
@@ -1066,6 +1171,112 @@ export default function WartelUnit({
               </div>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Produk Sinkronisasi */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden">
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Package className="text-blue-600" size={18} />
+                <h3 className="font-extrabold text-slate-900 text-sm">Update Nilai & Stok Produk</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingProduct(null)}
+                className="text-slate-400 hover:text-slate-600 font-extrabold text-lg"
+              >
+                &times;
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveProductEdit} className="p-6 space-y-4 text-xs text-slate-700">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-500 block">Kode Barang</label>
+                <div className="p-2.5 bg-slate-100 border border-slate-150 rounded-lg text-slate-600 font-mono font-bold">
+                  {editingProduct.code}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-600 block">Nama Barang / Layanan</label>
+                <input
+                  type="text"
+                  required
+                  value={editProductName}
+                  onChange={(e) => setEditProductName(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Stok Barang ({editingProduct.unit})</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={editStock}
+                    onChange={(e) => setEditStock(Math.max(0, Number(e.target.value)))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Satuan Unit</label>
+                  <div className="p-2.5 bg-slate-100 border border-slate-150 rounded-lg text-slate-600 font-bold">
+                    {editingProduct.unit}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Harga Pokok (Modal)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={editCostPrice}
+                    onChange={(e) => setEditCostPrice(Math.max(0, Number(e.target.value)))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Harga Jual</label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={editSellingPrice}
+                    onChange={(e) => setEditSellingPrice(Math.max(0, Number(e.target.value)))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100/60 text-[10px] text-blue-800 leading-relaxed">
+                Perubahan ini akan memperbarui data master barang di <strong>Etalase Ritel & POS Kasir</strong> dan merevisi nilai sirkulasi secara otomatis.
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-lg cursor-pointer transition-colors text-center"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg cursor-pointer transition-colors text-center"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

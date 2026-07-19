@@ -1,0 +1,6 @@
+{
+  "name": "Aplikasi Pembukuan Koperasi",
+  "description": "Sistem pembukuan keuangan koperasi terintegrasi dengan 3 unit usaha (Wartel, Simpan Pinjam, Pertokoan), laporan keuangan konsolidasi, database anggota, dan persetujuan kredit berjenjang.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

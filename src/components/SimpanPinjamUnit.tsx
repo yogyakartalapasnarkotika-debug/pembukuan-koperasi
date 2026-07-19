@@ -15,7 +15,9 @@ import {
   Info,
   DollarSign,
   Briefcase,
-  Wallet
+  Wallet,
+  Edit2,
+  Trash2
 } from 'lucide-react';
 
 export interface CapitalContribution {
@@ -172,6 +174,52 @@ export default function SimpanPinjamUnit({
   const [modalNotes, setModalNotes] = useState('');
   const [modalSuccess, setModalSuccess] = useState('');
   const [modalError, setModalError] = useState('');
+
+  // --- Edit Capital Contribution States ---
+  const [editingCapital, setEditingCapital] = useState<CapitalContribution | null>(null);
+  const [editCapitalAmount, setEditCapitalAmount] = useState<number>(0);
+  const [editCapitalSource, setEditCapitalSource] = useState('');
+  const [editCapitalDate, setEditCapitalDate] = useState('');
+  const [editCapitalNotes, setEditCapitalNotes] = useState('');
+
+  const handleOpenEditCapital = (c: CapitalContribution) => {
+    setEditingCapital(c);
+    setEditCapitalAmount(c.amount);
+    setEditCapitalSource(c.source);
+    setEditCapitalDate(c.date);
+    setEditCapitalNotes(c.notes);
+  };
+
+  const handleSaveEditCapital = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCapital) return;
+
+    if (editCapitalAmount <= 0) {
+      alert('Nominal modal disetor harus lebih dari Rp 0!');
+      return;
+    }
+    if (!editCapitalSource) {
+      alert('Tentukan sumber dana penyertaan modal!');
+      return;
+    }
+
+    const updated = capitalContributions.map(c => {
+      if (c.id === editingCapital.id) {
+        return {
+          ...c,
+          amount: Number(editCapitalAmount),
+          source: editCapitalSource,
+          date: editCapitalDate,
+          notes: editCapitalNotes
+        };
+      }
+      return c;
+    });
+
+    setCapitalContributions(updated);
+    localStorage.setItem('usp_capital_contributions', JSON.stringify(updated));
+    setEditingCapital(null);
+  };
 
   const handleApplyCapital = (e: React.FormEvent) => {
     e.preventDefault();
@@ -910,15 +958,22 @@ export default function SimpanPinjamUnit({
                       {c.notes && <span className="italic">"{c.notes}"</span>}
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono font-extrabold text-emerald-600">+{formatIDR(c.amount)}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-extrabold text-emerald-600 mr-2">+{formatIDR(c.amount)}</span>
+                    <button
+                      onClick={() => handleOpenEditCapital(c)}
+                      className="text-amber-600 hover:text-amber-700 p-1.5 rounded-md hover:bg-amber-50 cursor-pointer transition-colors"
+                      title="Edit penyertaan modal"
+                    >
+                      <Edit2 size={12} />
+                    </button>
                     {c.id !== 'cap-1' && (
                       <button
                         onClick={() => handleDeleteCapital(c.id)}
-                        className="text-rose-500 hover:text-rose-700 p-1 rounded-md hover:bg-rose-50 cursor-pointer transition-colors"
+                        className="text-rose-600 hover:text-rose-700 p-1.5 rounded-md hover:bg-rose-50 cursor-pointer transition-colors"
                         title="Hapus penyertaan modal"
                       >
-                        <X size={14} />
+                        <Trash2 size={12} />
                       </button>
                     )}
                   </div>
@@ -1441,6 +1496,94 @@ export default function SimpanPinjamUnit({
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Capital Contribution Modal */}
+      {editingCapital && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4" id="capital-edit-modal">
+          <div className="bg-white rounded-2xl shadow-lg border border-slate-100 w-full max-w-md p-6 space-y-4 animate-fade-in">
+            
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-850 text-sm">Formulir Edit Data Transaksi Modal</h3>
+                <p className="text-[10px] text-slate-400 font-medium">Ubah rincian penyertaan modal koperasi</p>
+              </div>
+              <button 
+                onClick={() => setEditingCapital(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditCapital} className="space-y-4 text-xs text-slate-700">
+              
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600 block">Nominal Rupiah (Rp) <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  min="100000"
+                  required
+                  placeholder="Contoh: 10000000"
+                  value={editCapitalAmount || ''}
+                  onChange={(e) => setEditCapitalAmount(Number(e.target.value))}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600 block">Sumber Modal / Penyetor <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Koperasi Karya Mukti Pusat"
+                  value={editCapitalSource}
+                  onChange={(e) => setEditCapitalSource(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600 block">Tanggal Penerimaan <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  required
+                  value={editCapitalDate}
+                  onChange={(e) => setEditCapitalDate(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-slate-600 block">Catatan / Keterangan</label>
+                <input
+                  type="text"
+                  placeholder="Keterangan transaksi modal"
+                  value={editCapitalNotes}
+                  onChange={(e) => setEditCapitalNotes(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2 justify-end border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingCapital(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4.5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg cursor-pointer inline-flex items-center gap-1.5 shadow-xs transition-colors"
+                >
+                  <Check size={14} /> Simpan Perubahan
+                </button>
+              </div>
+
+            </form>
           </div>
         </div>
       )}

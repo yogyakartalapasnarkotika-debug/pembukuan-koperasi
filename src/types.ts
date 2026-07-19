@@ -87,6 +87,7 @@ export interface WartelRecord {
   profit: number;
   description: string;
   paymentMethod: 'cash' | 'deposit';
+  quantity?: number;
 }
 
 export interface PertokoanProduct {

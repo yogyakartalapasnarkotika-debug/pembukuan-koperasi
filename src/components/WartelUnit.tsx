@@ -61,6 +61,7 @@ export default function WartelUnit({
   const [guestName, setGuestName] = useState('');
   const [costPrice, setCostPrice] = useState(0);
   const [sellingPrice, setSellingPrice] = useState(0);
+  const [quantity, setQuantity] = useState<number>(1);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'deposit'>('cash');
   const [description, setDescription] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -166,15 +167,18 @@ export default function WartelUnit({
       return;
     }
 
+    const totalSellingPrice = Number(sellingPrice) * quantity;
+    const totalCostPrice = Number(costPrice) * quantity;
+    const totalProfit = totalSellingPrice - totalCostPrice;
+
     // Check member balance for deposit payment method
     if (customerType === 'member' && activeMember && paymentMethod === 'deposit') {
-      if (activeMember.savings.sukarela < sellingPrice) {
+      if (activeMember.savings.sukarela < totalSellingPrice) {
         setErrorMsg(`Saldo Simpanan Sukarela Anggota tidak mencukupi! (Saldo: ${formatIDR(activeMember.savings.sukarela)})`);
         return;
       }
     }
 
-    const calculatedProfit = sellingPrice - costPrice;
     const finalCustName = customerType === 'member' && activeMember ? activeMember.name : guestName;
 
     const newRecord: WartelRecord = {
@@ -183,11 +187,12 @@ export default function WartelUnit({
       serviceType,
       customerName: finalCustName,
       memberId: customerType === 'member' ? selectedMemberId : undefined,
-      costPrice: Number(costPrice),
-      sellingPrice: Number(sellingPrice),
-      profit: calculatedProfit,
+      costPrice: totalCostPrice,
+      sellingPrice: totalSellingPrice,
+      profit: totalProfit,
       paymentMethod,
-      description
+      description,
+      quantity: Number(quantity)
     };
 
     onAddWartelRecord(newRecord);
@@ -198,34 +203,35 @@ export default function WartelUnit({
         id: `tx-wartel-${Date.now()}`,
         date: newRecord.date,
         type: 'kas_masuk',
-        amount: Number(sellingPrice),
+        amount: totalSellingPrice,
         category: 'Penjualan Wartel',
-        description: `Penjualan ${serviceType.toUpperCase()} - ${finalCustName}`,
+        description: `Penjualan ${serviceType.toUpperCase()} (${quantity}x) - ${finalCustName}`,
         unit: 'wartel',
         paymentMethod: paymentMethod === 'cash' ? 'cash' : 'deposit'
       });
       // Cost HPP
-      if (Number(costPrice) > 0) {
+      if (totalCostPrice > 0) {
         onAddTransaction({
           id: `tx-wartel-hpp-${Date.now()}`,
           date: newRecord.date,
           type: 'kas_keluar',
-          amount: Number(costPrice),
+          amount: totalCostPrice,
           category: 'Biaya Operasional',
-          description: `HPP / Modal ${serviceType.toUpperCase()} - ${finalCustName}`,
+          description: `HPP / Modal ${serviceType.toUpperCase()} (${quantity}x) - ${finalCustName}`,
           unit: 'wartel',
           paymentMethod: 'cash'
         });
       }
     }
     
-    setSuccessMsg(`Sukses menyimpan transaksi penjualan senilai ${formatIDR(sellingPrice)}!`);
+    setSuccessMsg(`Sukses menyimpan transaksi ${quantity}x penjualan senilai ${formatIDR(totalSellingPrice)}!`);
     
     setCostPrice(0);
     setSellingPrice(0);
     setDescription('');
     setSelectedMemberId('');
     setGuestName('');
+    setQuantity(1);
   };
 
   // Handle Expense submission
@@ -442,9 +448,20 @@ export default function WartelUnit({
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="font-bold text-slate-600 block">Harga Pokok (Modal)</label>
+               <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-1 space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Jumlah</label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-blue-500 text-slate-800"
+                  />
+                </div>
+                <div className="col-span-1 space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Modal Satuan</label>
                   <input
                     type="number"
                     min="0"
@@ -455,8 +472,8 @@ export default function WartelUnit({
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold focus:outline-none focus:border-blue-500 text-slate-800"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label className="font-bold text-slate-600 block">Harga Jual (Pelanggan)</label>
+                <div className="col-span-1 space-y-1.5">
+                  <label className="font-bold text-slate-600 block">Jual Satuan</label>
                   <input
                     type="number"
                     min="0"
@@ -470,11 +487,35 @@ export default function WartelUnit({
               </div>
 
               {sellingPrice > 0 && (
-                <div className={`p-2.5 rounded-lg text-[11px] font-bold flex justify-between items-center ${
-                  sellingPrice - costPrice >= 0 ? 'bg-emerald-50 border border-emerald-100 text-emerald-800' : 'bg-rose-50 text-rose-800'
+                <div className={`p-2.5 rounded-lg text-[11px] font-bold space-y-1 ${
+                  sellingPrice - costPrice >= 0 ? 'bg-emerald-50 border border-emerald-100 text-emerald-800' : 'bg-rose-50 text-rose-800 border border-rose-100'
                 }`}>
-                  <span>Estimasi Laba Bersih:</span>
-                  <span className="font-mono font-black">{formatIDR(sellingPrice - costPrice)}</span>
+                  <div className="flex justify-between items-center">
+                    <span>Estimasi Laba Satuan:</span>
+                    <span className="font-mono font-bold">{formatIDR(sellingPrice - costPrice)}</span>
+                  </div>
+                  {quantity > 1 && (
+                    <>
+                      <div className="flex justify-between items-center border-t border-emerald-200/50 pt-1 mt-1">
+                        <span>Total Modal ({quantity}x):</span>
+                        <span className="font-mono text-slate-500">{formatIDR(costPrice * quantity)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Total Jual ({quantity}x):</span>
+                        <span className="font-mono text-slate-500">{formatIDR(sellingPrice * quantity)}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-emerald-200 pt-1 mt-1 font-black text-xs text-emerald-900">
+                        <span>Total Laba Bersih:</span>
+                        <span className="font-mono">{formatIDR((sellingPrice - costPrice) * quantity)}</span>
+                      </div>
+                    </>
+                  )}
+                  {quantity === 1 && (
+                    <div className="flex justify-between items-center border-t border-emerald-200/50 pt-1 mt-1">
+                      <span>Total Laba Bersih:</span>
+                      <span className="font-mono font-black">{formatIDR(sellingPrice - costPrice)}</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -525,6 +566,7 @@ export default function WartelUnit({
                     <th className="p-3">Waktu</th>
                     <th className="p-3">Layanan</th>
                     <th className="p-3">Pelanggan</th>
+                    <th className="p-3 text-center">Jumlah</th>
                     <th className="p-3 text-right">Modal</th>
                     <th className="p-3 text-right">Harga Jual</th>
                     <th className="p-3 text-right">Laba Jual</th>
@@ -533,7 +575,7 @@ export default function WartelUnit({
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {records.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-400">
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
                         Belum ada penjualan terekam hari ini.
                       </td>
                     </tr>
@@ -559,6 +601,9 @@ export default function WartelUnit({
                           <td className="p-3">
                             <span className="font-bold text-slate-800 block">{rec.customerName}</span>
                             {rec.memberId && <span className="font-mono text-[9px] font-bold text-slate-400">{rec.memberId}</span>}
+                          </td>
+                          <td className="p-3 text-center font-bold text-slate-800">
+                            {rec.quantity || 1}x
                           </td>
                           <td className="p-3 text-right font-mono text-slate-500">
                             {formatIDR(rec.costPrice)}

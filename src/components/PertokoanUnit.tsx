@@ -1502,7 +1502,7 @@ export default function PertokoanUnit({
                             </td>
                             <td className="p-3">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${meta.color}`}>
-                                {meta.label}
+                                {meta.label} {r.quantity && r.quantity > 1 ? `(${r.quantity}x)` : ''}
                               </span>
                             </td>
                             <td className="p-3 font-bold text-slate-800 whitespace-nowrap">
